@@ -18,19 +18,25 @@ import os
 
 ###---VARIABLES---###
 # Service Button
-buttonPin = 
+buttonPin = 4
 
 # Lock Line
-lockLine = 
+lockLine = 17
 
 # Unlock Line
-unlockLine = 
+unlockLine = 27
+
+# Timout Pin
+timoutPin = 2
+
+# Mode Toggle Switch
+secureToggle = 3
 
 # SPI Lines
 SPICLK = 11
 SPIMISO = 9
 SPIMOSI = 10
-SPISS = 8
+SPISS = 22
 
 # Potentiometer
 potCh = 0
