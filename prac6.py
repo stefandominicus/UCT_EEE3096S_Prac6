@@ -60,9 +60,10 @@ currentWord = -1 # which word is being captured now
 # Timing
 sampleTime = 0.1
 wordTimeout = 1 # time waited to signal the end of a word
-codeTimout = 50 # time waited to signal the end of an input code
+codeTimout = 2 # time waited to signal the end of an input code
 timing = 0
 stopped = 0 #debug
+durationTolerance = 0.5
 ###-------------###
 
 ###---SETUP---###
@@ -118,8 +119,18 @@ def getADCValue(chan):
 ###---LOCK---###
 def checkSecureCode():
 	print("Checking Secure Code!")
-	accessGranted = 0
+	accessGranted = 1
 	# check code
+	if (currentWord == len(code) - 1):
+		#inputCode has the right number of words
+		for i in range(currentWord):
+			if (inputCode[i][1] != code[i][1] or abs(inputCode[i][0] - code[i][0]) > durationTolerance):
+				#word is incorrect
+				accessGranted = 0
+				break
+	else:
+		#wrong number of words
+		accessGranted = 0
 
 	if (accessGranted):
 		if (lockState):
@@ -128,12 +139,25 @@ def checkSecureCode():
 			lock()
 	else:
 		# invalid code
-		lock()
+		print("Invalid Code")
+		#Play Sound
 
 def checkUnsecureCode():
 	print("Checking Unsecure Code!")
-	accessGranted = 0
+	accessGranted = 1
 	# check code
+	if (currentWord == len(code) - 1):
+		#input code has the right number of words
+		sortedCode = sorted(code, key=lambda l:l[0], reverse=True)
+		sortedInputCode = sorted(inputCode, key=lambda l:l[0], reverse=True)
+		for i in range(currentWord):
+			if (abs(sortedInputCode[i][0] - sortedCode[i][0]) > durationTolerance):
+				#duration is incorrect
+				accessGranted = 0
+				break
+	else:
+		#wrong number of words
+		accessGranted = 0
 
 	if (accessGranted):
 		if (lockState):
@@ -142,13 +166,15 @@ def checkUnsecureCode():
 			lock()
 	else:
 		# invalid code
-		lock()
+		print("Invalid Code")
+		#Play sound
 
 def lock(): # issue a LOCK command
-	global lockState
+	print("Locking...")
 	# write lockLine HIGH for two seconds
 	# play sound
 	# update lockState variable
+	global lockState
 	lockState = 1
 	print("Locked!")
 
@@ -160,6 +186,7 @@ def unlock(): # issue an UNLOCK command
 	lockState = 0
 	print("Unlocked!")
 ###-------------###
+
 ###---TIMER---###
 def timer():
 	if (not terminating and not doneEnteringCode and timing):	# Only continue if the parent thread is still running
@@ -233,7 +260,7 @@ def timer():
 ###---LOOP---###
 try:
 	os.system('clear')
-
+	lock() #make sure the system starts off being locked
 	# Keep the program running, waiting for button presses
 	while(1):
 		if (doneEnteringCode and timing):
