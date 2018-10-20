@@ -52,14 +52,14 @@ doneEnteringCode = 0 # has the user finished their code
 # Passcode
 word = [0, 0] # Duration, Direction
 MAX_NUMBER_OF_WORDS = 16
-code = [[1, 0], [1, 1], [1, 0], [1, 1]] # hardcoded passcode
+code = [[1, 0], [2, 1], [1, 0], [1, 1], [3, 0]] # hardcoded passcode
 inputCode = [word] * MAX_NUMBER_OF_WORDS # up to n words can be entered by the user
 currentWordTime = 0 # time since the current word was started
 currentWord = -1 # which word is being captured now
 
 # Timing
 sampleTime = 0.1
-wordTimeout = 1 # time waited to signal the end of a word
+wordTimeout = 0.5 # time waited to signal the end of a word
 codeTimout = 2 # time waited to signal the end of an input code
 timing = 0
 stopped = 0 #debug
@@ -107,7 +107,7 @@ def buttonPush(channel):
 		timer()
 
 # Interrupt Event Detection
-GPIO.add_event_detect(buttonPin, GPIO.FALLING, callback=buttonPush, bouncetime=100)
+GPIO.add_event_detect(buttonPin, GPIO.FALLING, callback=buttonPush, bouncetime=200)
 ###-------------###
 
 ###---ADC---###
@@ -133,6 +133,7 @@ def checkSecureCode():
 		accessGranted = 0
 
 	if (accessGranted):
+		os.system('omxplayer success.mp3 > /dev/null 2 >&1')
 		if (lockState):
 			unlock()
 		else:
@@ -141,6 +142,7 @@ def checkSecureCode():
 		# invalid code
 		print("Invalid Code")
 		#Play Sound
+		os.system('omxplayer fail.mp3 > /dev/null 2 >&1')
 
 def checkUnsecureCode():
 	print("Checking Unsecure Code!")
@@ -160,6 +162,7 @@ def checkUnsecureCode():
 		accessGranted = 0
 
 	if (accessGranted):
+		os.system('omxplayer success.mp3 > /dev/null 2 >&1')
 		if (lockState):
 			unlock()
 		else:
@@ -168,11 +171,14 @@ def checkUnsecureCode():
 		# invalid code
 		print("Invalid Code")
 		#Play sound
+		os.system('omxplayer fail.mp3 > /dev/null 2 >&1')
 
 def lock(): # issue a LOCK command
 	print("Locking...")
 	# write lockLine HIGH for two seconds
-	# play sound
+	GPIO.output(lockLine, GPIO.HIGH)
+	time.sleep(2)
+	GPIO.output(lockLine, GPIO.LOW)
 	# update lockState variable
 	global lockState
 	lockState = 1
@@ -181,7 +187,9 @@ def lock(): # issue a LOCK command
 def unlock(): # issue an UNLOCK command
 	global lockState
 	# write unlockLine HIGH for two seconds
-	# play sound
+	GPIO.output(unlockLine, GPIO.HIGH)
+	time.sleep(2)
+	GPIO.output(unlockLine, GPIO.LOW)
 	# update lockState variable
 	lockState = 0
 	print("Unlocked!")
