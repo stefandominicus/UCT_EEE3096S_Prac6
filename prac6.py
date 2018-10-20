@@ -27,7 +27,7 @@ lockLine = 17
 unlockLine = 27
 
 # Timout Pin
-timoutPin = 2
+timeoutPin = 2
 
 # Mode Toggle Switch
 secureToggle = 3
@@ -41,26 +41,28 @@ SPISS = 22
 # Potentiometer
 potCh = 0
 prevADCValue = 0
-deadband = 10 # 10 out of 1023
+deadband = 20 # 10 out of 1023
 
 # States
-terminating = False
+terminating = 0
 directionState = 0 # -1=stop, 0=down, 1=up
 lockState = 1 # 0=unlocked, 1 = locked
 doneEnteringCode = 0 # has the user finished their code
 
 # Passcode
 word = [0, 0] # Duration, Direction
+MAX_NUMBER_OF_WORDS = 16
 code = [[1, 0], [1, 1], [1, 0], [1, 1]] # hardcoded passcode
-inputCode = [word]*16 # up to 16 words can be entered by the user
+inputCode = [word] * MAX_NUMBER_OF_WORDS # up to n words can be entered by the user
 currentWordTime = 0 # time since the current word was started
-currentWord = 0 # which word is being captured now
+currentWord = -1 # which word is being captured now
 
 # Timing
-sampleTime = 0.01
+sampleTime = 0.1
 wordTimeout = 1 # time waited to signal the end of a word
-codeTimout = 2 # time waited to signal the end of an input code
-
+codeTimout = 50 # time waited to signal the end of an input code
+timing = 0
+stopped = 0 #debug
 ###-------------###
 
 ###---SETUP---###
@@ -71,12 +73,15 @@ GPIO.setmode(GPIO.BCM)
 GPIO.setup(buttonPin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 GPIO.setup(lockLine, GPIO.OUT)
 GPIO.setup(unlockLine, GPIO.OUT)
+GPIO.setup(timeoutPin, GPIO.OUT)
+GPIO.setup(secureToggle, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+
 
 # SPI Pins
 GPIO.setup(SPIMOSI, GPIO.OUT)
 GPIO.setup(SPIMISO, GPIO.IN)
 GPIO.setup(SPICLK, GPIO.OUT)
-GPIO.setup(SPICS, GPIO.OUT)
+GPIO.setup(SPISS, GPIO.OUT)
 
 # ADC Object
 mcp = Adafruit_MCP3008.MCP3008(clk=SPICLK, cs=SPISS, mosi=SPIMOSI, miso=SPIMISO)
@@ -86,18 +91,22 @@ mcp = Adafruit_MCP3008.MCP3008(clk=SPICLK, cs=SPISS, mosi=SPIMOSI, miso=SPIMISO)
 # Interrupt Method
 def buttonPush(channel):
 	if (GPIO.input(channel) == GPIO.LOW): # Avoid trigger on button realease
-		global inputCode, doneEnteringCode, directionState, prevADCValue
+		global inputCode, doneEnteringCode, directionState, prevADCValue, timing, currentWord, currentWordTime, stopped
+		os.system('clear')
 		# clear the input array
-		inputCode = [word]*16
+		inputCode = [word]*MAX_NUMBER_OF_WORDS
 		# set ready for new input
 		doneEnteringCode = 0
+		timing = 1
+		stopped = 0 #debug
 		directionState  = -1
 		prevADCValue = getADCValue(potCh)
-		# start timer
+		currentWordTime = 0 # time since the current word was started
+		currentWord = -1
 		timer()
 
 # Interrupt Event Detection
-GPIO.add_event_detect(resetPin, GPIO.FALLING, callback=buttonPush, bouncetime=100)
+GPIO.add_event_detect(buttonPin, GPIO.FALLING, callback=buttonPush, bouncetime=100)
 ###-------------###
 
 ###---ADC---###
@@ -125,7 +134,7 @@ def checkUnsecureCode():
 	print("Checking Unsecure Code!")
 	accessGranted = 0
 	# check code
-	
+
 	if (accessGranted):
 		if (lockState):
 			unlock()
@@ -151,54 +160,73 @@ def unlock(): # issue an UNLOCK command
 	lockState = 0
 	print("Unlocked!")
 ###-------------###
-
 ###---TIMER---###
 def timer():
-	if (not terminating and not doneEnteringCode):	# Only continue if the parent thread is still running
-													# and the code is still being entered
+	if (not terminating and not doneEnteringCode and timing):	# Only continue if the parent thread is still running
+									# and the code is still being entered
 		# Start timer in new thread, delay and recall function
 		threading.Timer(sampleTime, timer).start()
 
-		global currentWordTime, prevADCValue, inputCode, directionState, currentWord, doneEnteringCode
+		global currentWordTime, prevADCValue, inputCode, directionState, currentWord, doneEnteringCode, stopped
 
 		currentWordTime += sampleTime
 
 		ADCValue = getADCValue(potCh)
+		#print(ADCValue)
 
-		if ((ADCValue + deadband) > prevADCValue):
+		if (ADCValue  > (prevADCValue + deadband)):
 			# Going up
+			stopped = 0
 			prevADCValue = ADCValue
 			if (directionState == 1):
 				#continuing
-				inputCode[currentWord] = [currentWordTime, directionState]
+				inputCode[currentWord] = [round(currentWordTime, 1), directionState]
 			else:
 				#starting
+				print(inputCode[currentWord])
 				currentWordTime = 0
 				directionState = 1
-				currentWord += 1
+				GPIO.output(timeoutPin, GPIO.LOW)
+				if (currentWord == MAX_NUMBER_OF_WORDS - 1):
+					doneEnteringCode = 1
+				else:
+					currentWord += 1
 
-
-		else if ((ADCValue - deadband) < prevADCValue):
+		elif (ADCValue < (prevADCValue - deadband)):
 			# Going down
+			stopped = 0
 			prevADCValue = ADCValue
 			if (directionState == 0):
 				#continuing
-				inputCode[currentWord] = [currentWordTime, directionState]
+				inputCode[currentWord] = [round(currentWordTime, 1), directionState]
 			else:
 				#starting
+				print(inputCode[currentWord])
 				currentWordTime = 0
 				directionState = 0
-				currentWord += 1
+				GPIO.output(timeoutPin, GPIO.LOW)
+				if (currentWord == MAX_NUMBER_OF_WORDS - 1):
+					doneEnteringCode = 1
+				else:
+					currentWord += 1
 
 		else:
 			# Stopped
-			if ((currentWordTime - inputCode[currentWord][0]) >= wordTimeout):
+			if (currentWord != -1 and (currentWordTime - inputCode[currentWord][0]) >= wordTimeout and not stopped):
 				# end the current word
+				global stopped
+				stopped = 1
+				#print(inputCode)
+				print("Ready for new word")
 				directionState = -1
+				GPIO.output(timeoutPin, GPIO.HIGH)
 
 			if ((currentWordTime - inputCode[currentWord][0]) >= codeTimout):
 				# end the capture session and flag for the code to be checked
+				print ("codeTimeout")
+				print(inputCode)
 				doneEnteringCode = 1
+				GPIO.output(timeoutPin, GPIO.LOW)
 
 ###-------------###
 
@@ -208,7 +236,9 @@ try:
 
 	# Keep the program running, waiting for button presses
 	while(1):
-		if (doneEnteringCode):
+		if (doneEnteringCode and timing):
+			global timing
+			timing = 0
 			if (GPIO.input(secureToggle)):
 				# secure mode selected
 				checkSecureCode()
@@ -219,6 +249,6 @@ try:
 except KeyboardInterrupt:
 	print("losing")
 	# Release all resources being used by this program
-	terminating = True
+	terminating = 1
 	GPIO.cleanup()
 ###-------------###
