@@ -12,28 +12,47 @@
 unsorted_array: .skip 64	/* 16x4 */
 sorted_array: .skip 64
 
-input_message: .asciz "The array to be sorted is:"
+input_message: .asciz "The array to be sorted is: [%u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u]\n"
 .balign 4
-output_message: .asciz "The sorted array is:"
+output_message: .asciz "The sorted array is: [%u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u]\n"
 
 .balign 4
-return_link: .word 0
+end_of_main: .word 0
 
 .text
 
 .global main
 main:
-	ldr r1, return_link
+	ldr r1, =end_of_main
 	str lr, [r1]				/* save the link register */
 
 	/*-- Code here --*/
 
 	ldr r0, =input_message
-	bl printf
+	ldr r1, =unsorted_array
+	bl printf					/* print the input message
 
-	/*-- End of algorithm --*/
+outer_loop:
+	/* r4 - outer counter */
+	cmp r4, #15
+	beq end_outer_loop
+	
 
-	ldr lr, =return_link
+inner_loop:
+	/* r3 - inner counter */
+
+end_inner_loop:
+
+	b outer_loop
+
+end_outer_loop:
+
+
+
+
+
+end_main:
+	ldr lr, =end_of_main
 	ldr lr, [lr]				/* replace the original link register */
 	bx ldr						/* exit main usign link register */
 
