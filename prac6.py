@@ -164,6 +164,7 @@ def timer():
 		currentWordTime += sampleTime
 
 		ADCValue = getADCValue(potCh)
+		print(ADCValue)
 
 		if ((ADCValue + deadband) > prevADCValue):
 			# Going up
